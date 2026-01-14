@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to WebP Converter</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>Image → WebP Converter</h1>
+            <p class="subtitle">Fast, private, client-side conversion</p>
+        </header>
+
+        <section class="controls">
+            <div class="control-group">
+                <label for="quality">Quality: <span id="quality-value">85</span></label>
+                <input type="range" id="quality" min="0" max="100" value="85">
+            </div>
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="lossless">
+                    <span>Lossless compression</span>
+                </label>
+            </div>
+        </section>
+
+        <section class="advanced-controls">
+            <button type="button" class="advanced-toggle" id="advanced-toggle">
+                <span>Advanced Quality Settings</span>
+                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+            <div class="advanced-panel" id="advanced-panel" hidden>
+                <div class="advanced-grid">
+                    <div class="control-group">
+                        <label>Resize Algorithm</label>
+                        <div class="radio-group" id="resize-algo">
+                            <label class="radio-label">
+                                <input type="radio" name="resize-algo" value="lanczos3" checked>
+                                <span>Lanczos3</span>
+                                <small>Best quality (like Photoshop)</small>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="resize-algo" value="lanczos2">
+                                <span>Lanczos2</span>
+                                <small>Balanced</small>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="resize-algo" value="mks2013">
+                                <span>MKS 2013</span>
+                                <small>Magic Kernel Sharp</small>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="sharpness">Sharpening: <span id="sharpness-value">0.3</span></label>
+                        <input type="range" id="sharpness" min="0" max="1" step="0.1" value="0.3">
+                        <small class="hint">Applies unsharp mask after resize</small>
+                    </div>
+                    <div class="control-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="alpha-quality" checked>
+                            <span>Optimize alpha channel</span>
+                        </label>
+                        <small class="hint">Better transparency handling for PNGs</small>
+                    </div>
+                    <div class="control-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto-orient" checked>
+                            <span>Auto-orient (EXIF)</span>
+                        </label>
+                        <small class="hint">Fix rotation from camera metadata</small>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="size-selector">
+            <label class="size-label">Output Size</label>
+            <div class="size-options" id="size-options">
+                <button type="button" class="size-option" data-size="original">
+                    <span class="size-name">Original</span>
+                    <span class="size-desc">Keep dimensions</span>
+                </button>
+                <button type="button" class="size-option selected" data-size="1920">
+                    <span class="size-name">1920px</span>
+                    <span class="size-desc">Full HD - Hero images</span>
+                    <span class="size-badge">Recommended</span>
+                </button>
+                <button type="button" class="size-option" data-size="1280">
+                    <span class="size-name">1280px</span>
+                    <span class="size-desc">HD - Blog & articles</span>
+                </button>
+                <button type="button" class="size-option" data-size="800">
+                    <span class="size-name">800px</span>
+                    <span class="size-desc">Medium - Cards & previews</span>
+                </button>
+                <button type="button" class="size-option" data-size="400">
+                    <span class="size-name">400px</span>
+                    <span class="size-desc">Small - Thumbnails</span>
+                </button>
+                <button type="button" class="size-option" data-size="custom">
+                    <span class="size-name">Custom</span>
+                    <span class="size-desc">Set your own size</span>
+                </button>
+            </div>
+            <div class="custom-size-input" id="custom-size-input" hidden>
+                <label for="custom-width">Max width (px):</label>
+                <input type="number" id="custom-width" min="50" max="8000" value="1200" placeholder="1200">
+            </div>
+        </section>
+
+        <section class="upload-zone" id="drop-zone">
+            <div class="upload-content">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <p class="upload-text">Drag & drop PNG or JPEG images here</p>
+                <p class="upload-subtext">or</p>
+                <label class="file-button">
+                    <input type="file" id="file-input" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple hidden>
+                    <span>Choose Files</span>
+                </label>
+            </div>
+        </section>
+
+        <section class="convert-section" id="convert-section" hidden>
+            <div class="preview-header">
+                <h2><span id="file-count">0</span> image(s) selected</h2>
+                <p class="total-estimate">Estimated total: <span id="total-estimate">--</span></p>
+            </div>
+            <ul class="preview-list" id="preview-list"></ul>
+            <button class="btn btn-convert" id="convert-btn">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                Convert to WebP
+            </button>
+        </section>
+
+        <section class="results" id="results" hidden>
+            <div class="results-header">
+                <h2>Converted Images</h2>
+                <button class="btn btn-primary" id="download-all">Download All (ZIP)</button>
+            </div>
+            <ul class="image-list" id="image-list"></ul>
+        </section>
+    </main>
+
+    <template id="preview-item-template">
+        <li class="preview-item">
+            <div class="preview-thumb">
+                <img src="" alt="Preview">
+            </div>
+            <div class="preview-info">
+                <span class="preview-name"></span>
+                <span class="preview-dimensions"></span>
+            </div>
+            <div class="preview-estimate">
+                <span class="estimate-size">Calculating...</span>
+                <button class="btn-remove" title="Remove">×</button>
+            </div>
+        </li>
+    </template>
+
+    <template id="image-item-template">
+        <li class="image-item">
+            <div class="image-preview">
+                <img src="" alt="Preview">
+            </div>
+            <div class="image-info">
+                <span class="image-name"></span>
+                <div class="size-info">
+                    <span class="original-size"></span>
+                    <span class="arrow">→</span>
+                    <span class="converted-size"></span>
+                    <span class="reduction"></span>
+                </div>
+            </div>
+            <div class="image-status">
+                <div class="spinner" hidden></div>
+                <button class="btn btn-download" hidden>Download</button>
+            </div>
+        </li>
+    </template>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pica/9.0.1/pica.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
