@@ -22,6 +22,7 @@
     const sharpnessValue = document.getElementById('sharpness-value');
     const alphaQualityCheckbox = document.getElementById('alpha-quality');
     const autoOrientCheckbox = document.getElementById('auto-orient');
+    const removeWatermarkCheckbox = document.getElementById('remove-watermark');
     const convertSection = document.getElementById('convert-section');
     const convertBtn = document.getElementById('convert-btn');
     const fileCount = document.getElementById('file-count');
@@ -332,6 +333,7 @@
         const sharpness = parseFloat(sharpnessSlider.value);
         const resizeAlgo = getResizeAlgorithm();
         const optimizeAlpha = alphaQualityCheckbox.checked;
+        const removeWatermark = removeWatermarkCheckbox.checked;
 
         for (const fileData of selectedFiles) {
             const listItem = createImageListItem(fileData.file);
@@ -344,7 +346,8 @@
                     targetWidth,
                     sharpness,
                     resizeAlgo,
-                    optimizeAlpha
+                    optimizeAlpha,
+                    removeWatermark
                 });
                 convertedImages.push(result);
                 updateListItemSuccess(listItem, fileData.file, result);
@@ -434,7 +437,8 @@
             targetWidth,
             sharpness,
             resizeAlgo,
-            optimizeAlpha
+            optimizeAlpha,
+            removeWatermark
         } = options;
 
         return new Promise((resolve, reject) => {
@@ -460,6 +464,11 @@
                     sourceCanvas.width = img.naturalWidth;
                     sourceCanvas.height = img.naturalHeight;
                     sourceCtx.drawImage(img, 0, 0);
+
+                    // Remove AI watermark if enabled
+                    if (removeWatermark) {
+                        removeAIWatermark(sourceCanvas, sourceCtx);
+                    }
 
                     // Create destination canvas
                     const destCanvas = document.createElement('canvas');
@@ -557,6 +566,135 @@
         }
 
         ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Remove AI watermarks (Gemini star, etc.) from corners
+    function removeAIWatermark(canvas, ctx) {
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Watermark is typically in bottom-right corner
+        // Size is roughly 3-5% of image dimensions
+        const watermarkSize = Math.max(40, Math.min(width, height) * 0.05);
+        const margin = Math.max(10, watermarkSize * 0.3);
+
+        // Define the watermark region (bottom-right corner)
+        const regionX = width - watermarkSize - margin;
+        const regionY = height - watermarkSize - margin;
+        const regionW = watermarkSize + margin;
+        const regionH = watermarkSize + margin;
+
+        // Get image data for the region and surrounding area
+        const sampleSize = watermarkSize * 2;
+        const sampleX = Math.max(0, width - sampleSize - margin * 2);
+        const sampleY = Math.max(0, height - sampleSize - margin * 2);
+
+        const imageData = ctx.getImageData(sampleX, sampleY, width - sampleX, height - sampleY);
+        const data = imageData.data;
+        const imgWidth = imageData.width;
+        const imgHeight = imageData.height;
+
+        // Calculate average color from the left and top edges of the sample area
+        // (avoiding the watermark itself)
+        let avgR = 0, avgG = 0, avgB = 0, count = 0;
+
+        // Sample from left edge (avoiding bottom-right corner)
+        for (let y = 0; y < imgHeight - watermarkSize; y++) {
+            for (let x = 0; x < Math.min(20, imgWidth / 4); x++) {
+                const idx = (y * imgWidth + x) * 4;
+                avgR += data[idx];
+                avgG += data[idx + 1];
+                avgB += data[idx + 2];
+                count++;
+            }
+        }
+
+        // Sample from top edge
+        for (let y = 0; y < Math.min(20, imgHeight / 4); y++) {
+            for (let x = 0; x < imgWidth; x++) {
+                const idx = (y * imgWidth + x) * 4;
+                avgR += data[idx];
+                avgG += data[idx + 1];
+                avgB += data[idx + 2];
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            avgR = Math.round(avgR / count);
+            avgG = Math.round(avgG / count);
+            avgB = Math.round(avgB / count);
+        }
+
+        // Use content-aware fill: blend watermark area with surrounding pixels
+        const localX = regionX - sampleX;
+        const localY = regionY - sampleY;
+
+        for (let y = localY; y < imgHeight; y++) {
+            for (let x = localX; x < imgWidth; x++) {
+                const idx = (y * imgWidth + x) * 4;
+
+                // Calculate distance from the corner
+                const distX = (x - localX) / regionW;
+                const distY = (y - localY) / regionH;
+                const dist = Math.sqrt(distX * distX + distY * distY);
+
+                // Get reference color from nearby non-watermark area
+                let refR, refG, refB;
+
+                // Sample from the left of the watermark area
+                const refX = Math.max(0, localX - 10);
+                const refIdx = (y * imgWidth + refX) * 4;
+                refR = data[refIdx];
+                refG = data[refIdx + 1];
+                refB = data[refIdx + 2];
+
+                // Also sample from above
+                const refY = Math.max(0, localY - 10);
+                const refIdx2 = (refY * imgWidth + x) * 4;
+                refR = Math.round((refR + data[refIdx2]) / 2);
+                refG = Math.round((refG + data[refIdx2 + 1]) / 2);
+                refB = Math.round((refB + data[refIdx2 + 2]) / 2);
+
+                // Detect if this pixel might be part of the watermark
+                // Watermarks are typically lighter/white on the image
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                const refBrightness = (refR + refG + refB) / 3;
+
+                // If pixel is significantly brighter than reference, it's likely watermark
+                if (brightness > refBrightness + 30 || brightness > 200) {
+                    // Blend with reference colors
+                    const blendFactor = Math.min(1, (brightness - refBrightness) / 100);
+                    data[idx] = Math.round(data[idx] * (1 - blendFactor) + refR * blendFactor);
+                    data[idx + 1] = Math.round(data[idx + 1] * (1 - blendFactor) + refG * blendFactor);
+                    data[idx + 2] = Math.round(data[idx + 2] * (1 - blendFactor) + refB * blendFactor);
+                }
+            }
+        }
+
+        ctx.putImageData(imageData, sampleX, sampleY);
+
+        // Apply slight blur to the affected region to smooth edges
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = regionW + 20;
+        tempCanvas.height = regionH + 20;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Copy region
+        tempCtx.drawImage(canvas,
+            regionX - 10, regionY - 10, regionW + 20, regionH + 20,
+            0, 0, regionW + 20, regionH + 20
+        );
+
+        // Apply subtle blur
+        tempCtx.filter = 'blur(0.5px)';
+        tempCtx.drawImage(tempCanvas, 0, 0);
+
+        // Copy back with feathered edge
+        ctx.drawImage(tempCanvas,
+            0, 0, regionW + 20, regionH + 20,
+            regionX - 10, regionY - 10, regionW + 20, regionH + 20
+        );
     }
 
     function downloadFile(blob, filename) {

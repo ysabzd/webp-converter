@@ -130,6 +130,16 @@ input[type="range"]::-webkit-slider-thumb:hover {
     font-size: 1rem;
 }
 
+.watermark-option {
+    flex-wrap: wrap;
+}
+
+.inline-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 4px;
+}
+
 /* Advanced Controls */
 .advanced-controls {
     margin-bottom: 24px;
